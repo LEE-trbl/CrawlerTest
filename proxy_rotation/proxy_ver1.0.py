@@ -677,7 +677,7 @@ class SaveData:
             "헤드라인", "리뷰내용", "맛만족도", "도움수", "판매자", "이미지수"
         ])
         self.row: int = 2
-        self.dir_name: str = "Coupang-reviews"
+        self.dir_name: str = "../Coupang-reviews"
         self.create_directory()
 
     def create_directory(self) -> None:
