@@ -383,15 +383,15 @@ class Coupang:
         self.retries = 10  # 재시도 횟수 줄임
         self.delay_min = 1.0  # 최소 딜레이 증가
         self.delay_max = 2.0  # 최대 딜레이 증가
-        self.page_delay_min = 1.0  # 페이지 간 최소 딜레이 증가
-        self.page_delay_max = 1.5  # 페이지 간 최대 딜레이 증가
+        self.page_delay_min = 0.0  # 페이지 간 최소 딜레이 증가
+        self.page_delay_max = 0.0  # 페이지 간 최대 딜레이 증가
         self.max_pages = 300  # v1.6: 최대 페이지를 300으로 제한
 
         # 타임아웃 관련 설정
         self.consecutive_timeouts = 0
-        self.max_consecutive_timeouts = 3  # 연속 타임아웃 허용 횟수 감소
-        self.long_wait_min = 60  # 긴 대기 시간 줄임 (5분)
-        self.long_wait_max = 120  # 긴 대기 시간 줄임 (7분)
+        self.max_consecutive_timeouts = 5  # 연속 타임아웃 허용 횟수 감소
+        self.long_wait_min = 10  # 긴 대기 시간 줄임 (5분)
+        self.long_wait_max = 15  # 긴 대기 시간 줄임 (7분)
 
         # 프록시 로테이터 초기화
         self.proxy_rotator = ProxyRotator(proxy_list)

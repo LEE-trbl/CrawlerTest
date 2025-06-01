@@ -1,3 +1,4 @@
+# 기존 패키지들
 attrs==25.3.0
 Automat==25.4.16
 beautifulsoup4==4.13.4
@@ -60,3 +61,7 @@ webdriver-manager==4.0.2
 websocket-client==1.8.0
 wsproto==1.2.0
 zope.interface==7.2
+
+# 비동기 크롤러를 위한 추가 패키지
+aiohttp==3.10.11
+aiofiles==24.1.0
