@@ -133,7 +133,7 @@ def analyze_duplicates(data: List[Dict[str, Any]]) -> Dict[str, Any]:
 # 사용 예시
 def main():
     # JSON 파일 읽기
-    with open('gomgom_products_20250531_194717.json', 'r', encoding='utf-8') as f:
+    with open('홈플래닛_products_20250603_180442.json', 'r', encoding='utf-8') as f:
         products_data = json.load(f)
 
     print("=== 중복 분석 ===")
@@ -157,7 +157,7 @@ def main():
         print(f"중복 제거 후 제품 수: {len(cleaned_data)}")
 
         # 결과 저장
-        output_filename = f'gomgom_products_dedup_{strategy}.json'
+        output_filename = f'homeplanet_products_dedup_{strategy}.json'
         with open(output_filename, 'w', encoding='utf-8') as f:
             json.dump(cleaned_data, f, ensure_ascii=False, indent=2)
 

@@ -38,16 +38,16 @@ class CrawlingConfig:
     """크롤링 설정"""
     base_url: str = "https://www.coupang.com"
     brand_url: str = "https://www.coupang.com/np/products/brand-shop"
-    brand_name: str = "gomgom"
+    brand_name: str = "홈플래닛"
     max_pages: int = 5
     delay_range: tuple = (2.0, 5.0)
     max_retries: int = 3
     timeout: int = 30
 
     # 출력 설정
-    output_dir: str = "./coupang_gomgom_data"
-    csv_filename: str = "gomgom_products_{timestamp}.csv"
-    json_filename: str = "gomgom_products_{timestamp}.json"
+    output_dir: str = "./coupang_홈플래닛_data"
+    csv_filename: str = "홈플래닛_products_{timestamp}.csv"
+    json_filename: str = "홈플래닛_products_{timestamp}.json"
 
     # 로깅 설정
     log_level: str = "INFO"
@@ -527,7 +527,7 @@ class DataStorage:
 
 
 # =================== 메인 크롤러 클래스 ===================
-class CoupangGomgomCrawler:
+class Coupang홈플래닛Crawler:
     """쿠팡 곰곰 브랜드 크롤러"""
 
     def __init__(self, config: CrawlingConfig = None):
@@ -654,7 +654,7 @@ def main():
     config = CrawlingConfig(
         max_pages=3,  # 테스트용으로 3페이지만
         headless=False,  # 브라우저 창 표시 (디버깅용)
-        delay_range=(3.0, 6.0),
+        delay_range=(1.0, 1.1),
         log_level="INFO"
     )
 
@@ -664,7 +664,7 @@ def main():
     print("-" * 50)
 
     # 크롤링 실행
-    crawler = CoupangGomgomCrawler(config)
+    crawler = Coupang홈플래닛Crawler(config)
     result = crawler.run_crawling()
 
     # 결과 출력

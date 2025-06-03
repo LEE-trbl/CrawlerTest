@@ -136,48 +136,60 @@ class ProxyRotator:
         proxy_list: ['ip:port:username:password', ...] 형태의 프록시 리스트
         """
         self.proxy_list = proxy_list if proxy_list else []
-        self.proxy_cycle = itertools.cycle(self.proxy_list) if self.proxy_list else None
+        # itertools.cycle 제거 - 랜덤 선택으로 변경
         self.current_proxy = None
         self.failed_proxies = set()
         self.proxy_failure_count = {}  # 프록시별 실패 횟수 추적
         self.max_failures_per_proxy = 3  # 프록시당 최대 실패 허용 횟수
 
     def get_next_proxy(self):
-        """다음 프록시를 반환"""
-        if not self.proxy_cycle:
+        """랜덤하게 프록시를 선택하여 반환"""
+        if not self.proxy_list:
             return None
 
-        # 사용 가능한 프록시를 찾을 때까지 순환
-        attempts = 0
-        max_attempts = len(self.proxy_list) * 2  # 무한 루프 방지
+        # 사용 가능한 프록시 목록 생성
+        available_proxies = [proxy for proxy in self.proxy_list if proxy not in self.failed_proxies]
 
-        while attempts < max_attempts:
-            proxy = next(self.proxy_cycle)
-
-            # 완전히 실패한 프록시가 아니라면 사용
-            if proxy not in self.failed_proxies:
-                self.current_proxy = proxy
-                proxy_ip = proxy.split(':')[0]
-                failure_count = self.proxy_failure_count.get(proxy, 0)
-                print(f"[PROXY] 현재 사용 중인 프록시: {proxy_ip} (실패 횟수: {failure_count})")
-                return proxy
-
-            attempts += 1
-
-        # 모든 프록시가 완전히 실패했다면 실패 목록을 초기화
-        if len(self.failed_proxies) == len(self.proxy_list):
+        if not available_proxies:
+            # 모든 프록시가 완전히 실패했다면 실패 목록을 초기화
             print("[WARNING] 모든 프록시가 실패했습니다. 실패 목록과 카운터를 초기화합니다.")
             self.failed_proxies.clear()
             self.proxy_failure_count.clear()
+            available_proxies = self.proxy_list.copy()
 
-            # 첫 번째 프록시 반환
-            if self.proxy_list:
-                self.current_proxy = self.proxy_list[0]
-                proxy_ip = self.current_proxy.split(':')[0]
-                print(f"[PROXY] 초기화 후 사용 중인 프록시: {proxy_ip}")
-                return self.current_proxy
+        # 사용 가능한 프록시 중에서 랜덤하게 선택
+        proxy = random.choice(available_proxies)
+        self.current_proxy = proxy
 
-        return None
+        proxy_ip = proxy.split(':')[0]
+        failure_count = self.proxy_failure_count.get(proxy, 0)
+        print(f"[PROXY] 랜덤 선택된 프록시: {proxy_ip} (실패 횟수: {failure_count})")
+        return proxy
+
+    def get_random_proxy_from_working_set(self):
+        """성능이 좋은 프록시들 중에서 랜덤 선택"""
+        if not self.proxy_list:
+            return None
+
+        # 실패 횟수가 적은 프록시들을 우선적으로 선택
+        working_proxies = []
+        for proxy in self.proxy_list:
+            if proxy not in self.failed_proxies:
+                failure_count = self.proxy_failure_count.get(proxy, 0)
+                # 실패 횟수가 1회 이하인 프록시들을 우선 선택
+                if failure_count <= 1:
+                    working_proxies.append(proxy)
+
+        # 성능 좋은 프록시가 없으면 일반 선택 방식 사용
+        if not working_proxies:
+            return self.get_next_proxy()
+
+        proxy = random.choice(working_proxies)
+        self.current_proxy = proxy
+        proxy_ip = proxy.split(':')[0]
+        failure_count = self.proxy_failure_count.get(proxy, 0)
+        print(f"[PROXY] 성능 우선 랜덤 선택: {proxy_ip} (실패 횟수: {failure_count})")
+        return proxy
 
     def mark_proxy_failed(self, proxy):
         """프록시를 실패로 표시 (누적 실패 관리)"""
@@ -279,7 +291,7 @@ class ChromeDriver:
 class URLManager:
     """URL 관리 클래스 (JSON 지원)"""
 
-    def __init__(self, file_path="gomgom_products_20250531_194717.json"):
+    def __init__(self, file_path="homeplanet_products_dedup_most_reviews.json"):
         self.file_path = file_path
         self.products = []  # URL과 상품명을 함께 저장
         self.current_index = 0
@@ -381,17 +393,17 @@ class Coupang:
         # delay 관련 설정
         self.base_review_url: str = "https://www.coupang.com/vp/product/reviews"
         self.retries = 10  # 재시도 횟수 줄임
-        self.delay_min = 2.0  # 최소 딜레이 증가
-        self.delay_max = 8.0  # 최대 딜레이 증가
-        self.page_delay_min = 1.0  # 페이지 간 최소 딜레이 증가
-        self.page_delay_max = 1.5  # 페이지 간 최대 딜레이 증가
-        self.max_pages = 300  # v1.6: 최대 페이지를 300으로 제한
+        self.delay_min = 1.0  # 최소 딜레이 증가
+        self.delay_max = 2.0  # 최대 딜레이 증가
+        self.page_delay_min = 0.0  # 페이지 간 최소 딜레이 증가
+        self.page_delay_max = 0.0  # 페이지 간 최대 딜레이 증가
+        self.max_pages = 150  # v1.6: 최대 페이지를 300으로 제한
 
         # 타임아웃 관련 설정
         self.consecutive_timeouts = 0
-        self.max_consecutive_timeouts = 3  # 연속 타임아웃 허용 횟수 감소
-        self.long_wait_min = 60  # 긴 대기 시간 줄임 (5분)
-        self.long_wait_max = 120  # 긴 대기 시간 줄임 (7분)
+        self.max_consecutive_timeouts = 5  # 연속 타임아웃 허용 횟수 감소
+        self.long_wait_min = 10  # 긴 대기 시간 줄임 (5분)
+        self.long_wait_max = 15  # 긴 대기 시간 줄임 (7분)
 
         # 프록시 로테이터 초기화
         self.proxy_rotator = ProxyRotator(proxy_list)
@@ -478,7 +490,8 @@ class Coupang:
         session.timeout = (10, 30)  # 연결 타임아웃 10초, 읽기 타임아웃 30초
 
         if self.proxy_rotator and self.proxy_rotator.proxy_list:
-            proxy = self.proxy_rotator.get_next_proxy()
+            # 성능 우선 랜덤 선택 사용
+            proxy = self.proxy_rotator.get_random_proxy_from_working_set()
             if proxy:
                 proxy_dict = self.proxy_rotator.get_proxy_dict(proxy)
                 if proxy_dict:
@@ -552,9 +565,9 @@ class Coupang:
             self.consecutive_timeouts = 0
 
     def start(self) -> None:
-        """v1.6: 다중 상품 처리를 위한 메인 시작 함수 (JSON 지원)"""
+        """v1.7: 다중 상품 처리를 위한 메인 시작 함수 (JSON 지원)"""
         print("=" * 70)
-        print("🛒 쿠팡 리뷰 크롤러 v1.7 (JSON 지원)")
+        print("🛒 쿠팡 리뷰 크롤러 v1.7 (JSON 지원 + 랜덤 프록시)")
         print("=" * 70)
 
         # JSON 파일 로드
@@ -571,6 +584,7 @@ class Coupang:
         if self.proxy_rotator and self.proxy_rotator.proxy_list:
             available_proxies = self.proxy_rotator.get_available_proxy_count()
             print(f"[INFO] 사용 가능한 프록시: {available_proxies}/{len(self.proxy_rotator.proxy_list)}개")
+            print(f"[INFO] 🎲 프록시 랜덤 선택 모드 활성화")
 
         print("=" * 70)
 
@@ -664,12 +678,12 @@ class Coupang:
             payload = {
                 "productId": prod_code,
                 "page": current_page,
-                "size": 5,
-                "sortBy": "ORDER_SCORE_ASC",
+                "size": 10,
+                "sortBy": "DATE_DESC",
                 "ratings": "",
                 "q": "",
                 "viRoleCode": 2,
-                "ratingSummary": True,
+                "ratingSummary": False,
             }
 
             result = self.fetch(payload=payload, sd=sd)
@@ -848,7 +862,7 @@ class Coupang:
                     headline_elem = articles[idx].select_one(
                         "div.sdp-review__article__list__headline"
                     )
-                    headline = headline_elem.text.strip() if headline_elem else "등록된 헤드라인이 없습니다"
+                    headline = headline_elem.text.strip() if headline_elem else ""
 
                     review_content_elem = articles[idx].select_one(
                         "div.sdp-review__article__list__review__content.js_reviewArticleContent"
@@ -862,7 +876,7 @@ class Coupang:
                         if review_content_elem:
                             review_content = re.sub("[\n\t]", "", review_content_elem.text.strip())
                         else:
-                            review_content = "등록된 리뷰내용이 없습니다"
+                            review_content = ""
 
                     helpful_count_elem = articles[idx].select_one("span.js_reviewArticleHelpfulCount")
                     helpful_count = helpful_count_elem.text.strip() if helpful_count_elem else "0"
@@ -954,7 +968,7 @@ class SaveData:
             "헤드라인", "리뷰내용", "도움수", "이미지수"
         ])
         self.row: int = 2
-        self.dir_name: str = "Coupang-reviews"
+        self.dir_name: str = "Coupang-reviews-homeplanet"
         self.create_directory()
 
     def create_directory(self) -> None:
@@ -992,6 +1006,98 @@ class SaveData:
             pass
 
 
+def load_proxy_list_from_file(file_path="proxy_list.txt"):
+    """txt 파일에서 프록시 목록 로드"""
+    try:
+        if not os.path.exists(file_path):
+            create_sample_proxy_file(file_path)
+            return []
+
+        with open(file_path, 'r', encoding='utf-8') as f:
+            lines = f.readlines()
+
+        proxy_list = []
+
+        for line_num, line in enumerate(lines, 1):
+            line = line.strip()
+
+            # 빈 줄이나 주석(#으로 시작) 건너뛰기
+            if not line or line.startswith('#'):
+                continue
+
+            # 프록시 형식 검증 (ip:port:username:password)
+            parts = line.split(':')
+            if len(parts) == 4:
+                ip, port, username, password = parts
+                # 기본적인 IP와 포트 검증
+                if is_valid_proxy_format(ip, port):
+                    proxy_list.append(line)
+                    print(f"[INFO] 프록시 로드: {ip}:{port}")
+                else:
+                    print(f"[WARNING] 잘못된 프록시 형식 (라인 {line_num}): {line}")
+            else:
+                print(f"[WARNING] 잘못된 형식 (라인 {line_num}): {line}")
+                print("         올바른 형식: ip:port:username:password")
+
+        if proxy_list:
+            print(f"[SUCCESS] {len(proxy_list)}개의 유효한 프록시를 로드했습니다.")
+            return proxy_list
+        else:
+            print("[ERROR] 유효한 프록시가 없습니다.")
+            return []
+
+    except Exception as e:
+        print(f"[ERROR] 프록시 파일 읽기 실패: {e}")
+        return []
+
+
+def create_sample_proxy_file(file_path="proxy_list.txt"):
+    """샘플 프록시 파일 생성"""
+    sample_content = """# 프록시 목록 파일
+# 형식: ip:port:username:password
+# 한 줄에 하나씩 입력하세요
+# '#'으로 시작하는 줄은 주석으로 처리됩니다
+
+# 샘플 프록시 (실제 프록시로 교체하세요)
+173.214.177.18:5709:daxvymvx:kn518nmfd34a
+198.23.214.119:6386:daxvymvx:kn518nmfd34a
+50.114.98.49:5533:daxvymvx:kn518nmfd34a
+
+# 추가 프록시들을 여기에 입력하세요
+# 192.168.1.1:8080:user:pass
+# 10.0.0.1:3128:admin:password
+"""
+
+    try:
+        with open(file_path, 'w', encoding='utf-8') as f:
+            f.write(sample_content)
+        print(f"[INFO] 샘플 프록시 파일이 생성되었습니다: {file_path}")
+        print("[INFO] 파일을 편집하여 실제 프록시 정보를 입력한 후 다시 실행하세요.")
+    except Exception as e:
+        print(f"[ERROR] 샘플 파일 생성 실패: {e}")
+
+
+def is_valid_proxy_format(ip, port):
+    """기본적인 IP와 포트 형식 검증"""
+    try:
+        # IP 주소 형식 검증 (간단한 검증)
+        ip_parts = ip.split('.')
+        if len(ip_parts) != 4:
+            return False
+
+        for part in ip_parts:
+            if not part.isdigit() or not (0 <= int(part) <= 255):
+                return False
+
+        # 포트 번호 검증
+        if not port.isdigit() or not (1 <= int(port) <= 65535):
+            return False
+
+        return True
+    except:
+        return False
+
+
 def test_proxy(proxy_string):
     """프록시 연결 테스트"""
     try:
@@ -1014,116 +1120,37 @@ def test_proxy(proxy_string):
 
 
 def get_proxy_list():
-    """프록시 목록 반환"""
-    proxy_list = [
-        "173.214.177.18:5709:daxvymvx:kn518nmfd34a",
-        "198.23.214.119:6386:daxvymvx:kn518nmfd34a",
-        "50.114.98.49:5533:daxvymvx:kn518nmfd34a",
-        "46.202.71.214:6209:daxvymvx:kn518nmfd34a",
-        "161.123.130.76:5747:daxvymvx:kn518nmfd34a",
-        "31.58.26.192:6775:daxvymvx:kn518nmfd34a",
-        "145.223.56.63:7115:daxvymvx:kn518nmfd34a",
-        "146.103.44.72:6624:daxvymvx:kn518nmfd34a",
-        "38.170.172.188:5189:daxvymvx:kn518nmfd34a",
-        "45.127.248.25:5026:daxvymvx:kn518nmfd34a",
-        "31.58.10.142:6110:daxvymvx:kn518nmfd34a",
-        "23.236.216.19:6049:daxvymvx:kn518nmfd34a",
-        "198.46.148.25:5713:daxvymvx:kn518nmfd34a",
-        "38.170.161.92:9143:daxvymvx:kn518nmfd34a",
-        "198.46.241.3:6538:daxvymvx:kn518nmfd34a",
-        "107.173.105.178:5865:daxvymvx:kn518nmfd34a",
-        "166.88.3.136:6607:daxvymvx:kn518nmfd34a",
-        "154.6.23.206:6673:daxvymvx:kn518nmfd34a",
-        "23.27.209.117:6136:daxvymvx:kn518nmfd34a",
-        "38.170.190.2:9353:daxvymvx:kn518nmfd34a",
-        "154.6.126.125:6096:daxvymvx:kn518nmfd34a",
-        "166.88.48.75:5401:daxvymvx:kn518nmfd34a",
-        "104.239.124.101:6379:daxvymvx:kn518nmfd34a",
-        "23.94.7.16:5703:daxvymvx:kn518nmfd34a",
-        "69.58.12.228:8233:daxvymvx:kn518nmfd34a",
-        "154.6.83.210:6681:daxvymvx:kn518nmfd34a",
-        "198.23.214.73:6340:daxvymvx:kn518nmfd34a",
-        "45.56.174.13:6266:daxvymvx:kn518nmfd34a",
-        "184.174.126.179:6471:daxvymvx:kn518nmfd34a",
-        "23.26.94.223:6205:daxvymvx:kn518nmfd34a",
-        "104.253.48.9:5433:daxvymvx:kn518nmfd34a",
-        "31.58.10.94:6062:daxvymvx:kn518nmfd34a",
-        "199.180.9.234:6254:daxvymvx:kn518nmfd34a",
-        "23.26.95.206:5688:daxvymvx:kn518nmfd34a",
-        "45.39.115.110:5521:daxvymvx:kn518nmfd34a",
-        "142.111.1.155:5187:daxvymvx:kn518nmfd34a",
-        "38.170.173.9:7560:daxvymvx:kn518nmfd34a",
-        "173.211.68.56:6338:daxvymvx:kn518nmfd34a",
-        "136.0.194.176:6913:daxvymvx:kn518nmfd34a",
-        "2.57.20.166:6158:daxvymvx:kn518nmfd34a",
-        "31.58.16.101:6068:daxvymvx:kn518nmfd34a",
-        "23.229.125.105:5374:daxvymvx:kn518nmfd34a",
-        "154.29.65.170:6278:daxvymvx:kn518nmfd34a",
-        "184.174.58.190:5752:daxvymvx:kn518nmfd34a",
-        "31.58.151.218:6209:daxvymvx:kn518nmfd34a",
-        "38.154.227.7:5708:daxvymvx:kn518nmfd34a",
-        "67.227.113.38:5578:daxvymvx:kn518nmfd34a",
-        "104.238.37.137:6694:daxvymvx:kn518nmfd34a",
-        "45.41.177.160:5810:daxvymvx:kn518nmfd34a",
-        "104.224.90.77:6238:daxvymvx:kn518nmfd34a",
-        "23.95.250.26:6299:daxvymvx:kn518nmfd34a",
-        "107.174.194.82:5524:daxvymvx:kn518nmfd34a",
-        "192.210.191.184:6170:daxvymvx:kn518nmfd34a",
-        "89.249.193.68:5806:daxvymvx:kn518nmfd34a",
-        "104.238.36.110:6117:daxvymvx:kn518nmfd34a",
-        "154.30.242.189:9583:daxvymvx:kn518nmfd34a",
-        "45.61.96.107:6087:daxvymvx:kn518nmfd34a",
-        "154.6.121.142:6109:daxvymvx:kn518nmfd34a",
-        "161.123.115.82:5103:daxvymvx:kn518nmfd34a",
-        "206.206.71.185:5825:daxvymvx:kn518nmfd34a",
-        "104.233.12.204:6755:daxvymvx:kn518nmfd34a",
-        "142.111.1.136:5168:daxvymvx:kn518nmfd34a",
-        "184.174.126.21:6313:daxvymvx:kn518nmfd34a",
-        "173.214.177.68:5759:daxvymvx:kn518nmfd34a",
-        "184.174.44.132:6558:daxvymvx:kn518nmfd34a",
-        "166.88.3.141:6612:daxvymvx:kn518nmfd34a",
-        "146.103.55.254:6306:daxvymvx:kn518nmfd34a",
-        "142.111.1.184:5216:daxvymvx:kn518nmfd34a",
-        "185.202.175.168:6956:daxvymvx:kn518nmfd34a",
-        "64.64.110.201:6724:daxvymvx:kn518nmfd34a",
-        "184.174.43.147:6687:daxvymvx:kn518nmfd34a",
-        "216.173.120.112:6404:daxvymvx:kn518nmfd34a",
-        "45.150.23.193:6663:daxvymvx:kn518nmfd34a",
-        "212.42.203.93:6141:daxvymvx:kn518nmfd34a",
-        "198.37.109.217:6324:daxvymvx:kn518nmfd34a",
-        "161.123.151.141:6125:daxvymvx:kn518nmfd34a",
-        "107.172.221.174:6129:daxvymvx:kn518nmfd34a",
-        "146.103.44.232:6784:daxvymvx:kn518nmfd34a",
-        "166.88.63.158:5530:daxvymvx:kn518nmfd34a",
-        "45.56.174.31:6284:daxvymvx:kn518nmfd34a",
-        "142.111.93.118:6679:daxvymvx:kn518nmfd34a",
-        "136.0.109.79:6365:daxvymvx:kn518nmfd34a",
-        "23.26.71.120:5603:daxvymvx:kn518nmfd34a",
-        "142.111.93.249:6810:daxvymvx:kn518nmfd34a",
-        "45.41.171.92:6128:daxvymvx:kn518nmfd34a",
-        "103.47.52.105:8147:daxvymvx:kn518nmfd34a",
-        "38.154.191.250:8827:daxvymvx:kn518nmfd34a",
-        "107.175.56.231:6504:daxvymvx:kn518nmfd34a",
-        "136.0.182.246:6316:daxvymvx:kn518nmfd34a",
-        "38.170.188.152:5725:daxvymvx:kn518nmfd34a",
-        "104.238.37.28:6585:daxvymvx:kn518nmfd34a",
-        "38.154.224.210:6751:daxvymvx:kn518nmfd34a",
-        "104.239.78.151:6096:daxvymvx:kn518nmfd34a",
-        "161.123.115.213:5234:daxvymvx:kn518nmfd34a",
-        "46.202.227.136:6130:daxvymvx:kn518nmfd34a",
-        "181.214.13.85:5926:daxvymvx:kn518nmfd34a",
-        "23.26.95.223:5705:daxvymvx:kn518nmfd34a",
-        "46.202.59.8:5499:daxvymvx:kn518nmfd34a",
-        "161.123.115.232:5253:daxvymvx:kn518nmfd34a",
-        "142.147.240.199:6721:daxvymvx:kn518nmfd34a"
-    ]
+    """프록시 목록 반환 (파일에서 로드)"""
+    proxy_file_path = "proxy_list.txt"
 
-    print(f"[INFO] {len(proxy_list)}개의 프록시가 준비되었습니다.")
+    print("=" * 70)
+    print("🔗 프록시 설정")
+    print("=" * 70)
+
+    # 프록시 파일에서 로드
+    proxy_list = load_proxy_list_from_file(proxy_file_path)
+
+    if not proxy_list:
+        print(f"\n[WARNING] {proxy_file_path} 파일에 유효한 프록시가 없습니다.")
+
+        # 프록시 없이 실행할지 확인
+        run_without_proxy = input("프록시 없이 실행하시겠습니까? (Y/n): ").lower().strip()
+        if run_without_proxy != 'n':
+            print("[INFO] 프록시 없이 실행합니다.")
+            return None
+        else:
+            print("[INFO] 프로그램을 종료합니다.")
+            print(f"[INFO] {proxy_file_path} 파일을 편집하여 프록시를 추가한 후 다시 실행하세요.")
+            exit(0)
+
+    print(f"\n[INFO] {len(proxy_list)}개의 프록시가 준비되었습니다.")
     print("[NOTICE] v1.7 개선사항:")
     print("  ✅ JSON 파일 지원 (상품 URL과 이름을 함께 관리)")
     print("  ✅ 맛만족도, 판매자명 컬럼 제거")
     print("  ✅ 다중 상품 지원 및 개별 파일 저장")
     print("  ✅ 전체 진행률 및 결과 요약 제공")
+    print("  ✅ 프록시 목록 txt 파일 지원")
+    print("  🎲 랜덤 프록시 선택으로 차단 회피 향상")
     print()
 
     # 프록시 사용 여부 확인
